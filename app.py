@@ -50,7 +50,7 @@ with st.sidebar:
     if api_key:
         try:
             genai.configure(api_key=api_key.strip())
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel("gemini-1.5-flash-001")
             test_response = model.generate_content("테스트")
             st.success("✅ API 연결 성공!")
         except Exception as e:
