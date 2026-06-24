@@ -17,20 +17,43 @@ if "analysis_results" not in st.session_state:
 if "title_results" not in st.session_state:
     st.session_state.title_results = None
 
-# JSON 안전 추출 함수
+# 강화된 JSON 안전 추출 함수
 def extract_json_safely(text):
     try:
+        # 방법 1: ```json 블록 추출
         json_match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
         if json_match:
             return json.loads(json_match.group(1))
+        
+        # 방법 2: 일반 코드 블록 추출
         code_match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
         if code_match:
             return json.loads(code_match.group(1))
+        
+        # 방법 3: 중괄호 패턴 추출
+        brace_match = re.search(r"(\{.*\})", text, re.DOTALL)
+        if brace_match:
+            return json.loads(brace_match.group(1))
+        
+        # 방법 4: 직접 파싱
         return json.loads(text)
-    except json.JSONDecodeError:
+    
+    except Exception:
         return {
-            "오류": "파싱 실패",
-            "원문": text[:200] + "..." if len(text) > 200 else text
+            "오류": "JSON 파싱 실패",
+            "원문": text[:300] + "..." if len(text) > 300 else text,
+            "썸네일_텍스트": "분석 실패",
+            "콘텐츠_유형": "오류",
+            "설득_원칙": ["분석 실패"],
+            "클릭_점수": 0,
+            "강점": "분석을 완료할 수 없었습니다",
+            "약점": "API 응답 처리 중 오류 발생",
+            "혁신_제목": [
+                {"제목": "분석 실패", "기법": "오류", "심리_원리": "처리 불가"},
+                {"제목": "다시 시도", "기법": "오류", "심리_원리": "처리 불가"},
+                {"제목": "오류 발생", "기법": "오류", "심리_원리": "처리 불가"}
+            ],
+            "최우선_추천": "분석 실패"
         }
 
 # 사이드바 - API 설정
@@ -50,7 +73,9 @@ with st.sidebar:
     if api_key:
         try:
             genai.configure(api_key=api_key.strip())
-            model = genai.GenerativeModel("gemini-1.5-flash-001")
+            # 가장 안정적인 모델 사용
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            # 연결 테스트
             test_response = model.generate_content("테스트")
             st.success("✅ API 연결 성공!")
         except Exception as e:
@@ -96,13 +121,8 @@ with tab1:
             
             if st.button("🚀 분석 + 혁신 제목 생성 시작!", type="primary", key="analyze_btn"):
                 st.session_state.analysis_results = []
-                
                 progress_bar = st.progress(0)
                 status_text = st.empty()
-                
-                generation_config = genai.GenerationConfig(
-                    response_mime_type="application/json"
-                )
                 
                 for idx, file in enumerate(uploaded_files):
                     status_text.markdown(f"⏳ **분석 중... {idx+1}/{len(uploaded_files)}**: `{file.name}`")
@@ -151,13 +171,12 @@ with tab1:
 }
 """
                         
-                        response = model.generate_content(
-                            [prompt, image],
-                            generation_config=generation_config
-                        )
+                        # 가장 단순한 API 호출 (복잡한 설정 완전 제거)
+                        response = model.generate_content([prompt, image])
                         
+                        # 안전한 응답 처리
                         if hasattr(response, 'text') and response.text:
-                            result = json.loads(response.text)
+                            result = extract_json_safely(response.text)
                         else:
                             result = extract_json_safely(str(response))
                         
@@ -201,6 +220,7 @@ with tab1:
             if "오류" in result:
                 with st.expander(f"❌ [{i+1}] {result.get('파일명', '')} - 분석 실패"):
                     st.error("분석 중 오류가 발생했습니다.")
+                    st.code(result.get("원문", ""))
                 continue
             
             score = result.get("클릭_점수", 0)
@@ -286,10 +306,6 @@ with tab2:
             else:
                 with st.spinner("최고의 제목을 만들고 있습니다... ⏳"):
                     try:
-                        generation_config = genai.GenerationConfig(
-                            response_mime_type="application/json"
-                        )
-                        
                         prompt = f"""
 당신은 수천만 조회수 릴스를 만드는 최고의 카피라이터입니다.
 
@@ -326,13 +342,11 @@ with tab2:
 }}
 """
                         
-                        response = model.generate_content(
-                            prompt,
-                            generation_config=generation_config
-                        )
+                        # 단순한 API 호출
+                        response = model.generate_content(prompt)
                         
                         if hasattr(response, 'text') and response.text:
-                            result = json.loads(response.text)
+                            result = extract_json_safely(response.text)
                         else:
                             result = extract_json_safely(str(response))
                         
@@ -347,6 +361,7 @@ with tab2:
         
         if "오류" in result:
             st.error("제목 생성 중 오류가 발생했습니다.")
+            st.code(result.get("원문", ""))
         else:
             st.markdown("---")
             st.header("🎯 생성된 혁신 제목")
